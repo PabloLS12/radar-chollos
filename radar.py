@@ -12,9 +12,16 @@ import xml.etree.ElementTree as ET
 # ============ CONFIGURACIÓN (puedes editar esto) ============
 
 # Feeds a vigilar. "solo_errores" = todo lo que salga ahí es candidato.
+# Si una fuente tiene varias direcciones, se usa la primera que funcione.
 FEEDS = [
-    {"url": "https://www.chollometro.com/rss/grupo/errores-de-precio", "solo_errores": True},
-    {"url": "https://www.chollometro.com/rss/nuevos", "solo_errores": False},
+    {"urls": [
+        "https://www.chollometro.com/rss/grupo/errores-precio",
+        "https://www.chollometro.com/rss/grupo/error-de-precio",
+        "https://www.chollometro.com/rss/grupos/errores-de-precio",
+        "https://www.chollometro.com/rss/errores-de-precio",
+    ], "solo_errores": True, "opcional": True},
+    {"urls": ["https://www.chollometro.com/rss/nuevos"], "solo_errores": False},
+    {"urls": ["https://www.chollometro.com/rss/hot"], "solo_errores": False, "opcional": True},
 ]
 
 # Palabras que delatan un posible error de precio
@@ -158,11 +165,19 @@ def main():
 
     informe, avisos, nuevos_ids = [], [], []
     for feed in FEEDS:
-        try:
-            items = leer_feed(feed["url"])
-            informe.append(f"✅ {feed['url']} → {len(items)} chollos")
-        except Exception as ex:
-            informe.append(f"❌ {feed['url']} → {type(ex).__name__}: {ex}")
+        items, errores = None, []
+        for url in feed["urls"]:
+            try:
+                items = leer_feed(url)
+                informe.append(f"✅ {url} → {len(items)} chollos")
+                break
+            except Exception as ex:
+                errores.append(f"{url} → {type(ex).__name__}: {ex}")
+        if items is None:
+            if feed.get("opcional"):
+                informe.append(f"⚪ Fuente opcional no disponible ({len(errores)} direcciones probadas)")
+            else:
+                informe.append("❌ " + " | ".join(errores))
             continue
         for it in items:
             if it["id"] in vistos_set:
@@ -191,7 +206,7 @@ def main():
         with open(MEMORIA, "w") as f:
             json.dump(vistos, f)
 
-    if all(l.startswith("❌") for l in informe):
+    if not any(l.startswith("✅") for l in informe):
         sys.exit(1)
 
 
